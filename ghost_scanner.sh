@@ -71,6 +71,41 @@ banner() {
         "${bar}${C_RESET}"
 }
 
+# ---------- make sure python is available, installing it if needed ----------
+# Sets the global PY variable to whichever command works ("python" or "python3").
+ensure_python() {
+    if command -v python3 >/dev/null 2>&1; then
+        PY=python3
+        return
+    fi
+    if command -v python >/dev/null 2>&1; then
+        PY=python
+        return
+    fi
+
+    echo -e "${C_WARN}Python not found. Installing...${C_RESET}"
+    if [ -d "/data/data/com.termux" ] || [ -n "$TERMUX_VERSION" ]; then
+        pkg update -y && pkg install -y python
+    else
+        if command -v apt >/dev/null 2>&1; then
+            sudo apt update && sudo apt install -y python3
+        elif command -v pacman >/dev/null 2>&1; then
+            sudo pacman -Sy --noconfirm python
+        elif command -v dnf >/dev/null 2>&1; then
+            sudo dnf install -y python3
+        fi
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        PY=python3
+    elif command -v python >/dev/null 2>&1; then
+        PY=python
+    else
+        echo -e "${C_ERR}Failed to install Python automatically. Please install it manually.${C_RESET}"
+        PY=""
+    fi
+}
+
 # ---------- write out the python scanner (only once) ----------
 ensure_scanner_py() {
     [ -f "$SCANNER_PY" ] && return
@@ -622,7 +657,12 @@ CFGEOF
 
     echo -e "\nTesting connection, please wait...\n"
     ensure_scanner_py
-    command -v python >/dev/null 2>&1 && PY=python || PY=python3
+    ensure_python
+    if [ -z "$PY" ]; then
+        echo -e "${C_ERR}Cannot test: Python is not available.${C_RESET}"
+        pause
+        return
+    fi
     if "$PY" "$SCANNER_PY" --test; then
         touch "$VALID_MARKER"
         echo -e "\n${C_OK}Config test PASSED. Run Scan is now unlocked.${C_RESET}"
@@ -727,7 +767,12 @@ run_scan() {
     fi
 
     ensure_domains_file
-    command -v python >/dev/null 2>&1 && PY=python || PY=python3
+    ensure_python
+    if [ -z "$PY" ]; then
+        echo -e "${C_ERR}Cannot run scan: Python is not available.${C_RESET}"
+        pause
+        return
+    fi
     "$PY" "$SCANNER_PY" "$DOMAINS_FILE"
     echo ""
     pause
